@@ -171,6 +171,7 @@ export type Database = {
         Row: {
           category_id: string | null
           created_at: string | null
+          currency: string | null
           description: string | null
           id: string
           image_url: string | null
@@ -183,6 +184,7 @@ export type Database = {
         Insert: {
           category_id?: string | null
           created_at?: string | null
+          currency?: string | null
           description?: string | null
           id?: string
           image_url?: string | null
@@ -195,6 +197,7 @@ export type Database = {
         Update: {
           category_id?: string | null
           created_at?: string | null
+          currency?: string | null
           description?: string | null
           id?: string
           image_url?: string | null
@@ -278,6 +281,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_profiles: {
+        Row: {
+          address: string | null
+          city: string | null
+          created_at: string | null
+          full_name: string | null
+          id: string
+          phone: string | null
+          postal_code: string | null
+          state: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          city?: string | null
+          created_at?: string | null
+          full_name?: string | null
+          id: string
+          phone?: string | null
+          postal_code?: string | null
+          state?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          city?: string | null
+          created_at?: string | null
+          full_name?: string | null
+          id?: string
+          phone?: string | null
+          postal_code?: string | null
+          state?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
     }
     Views: {

@@ -1,75 +1,124 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Package, User } from 'lucide-react';
+import { Package, User, LogOut } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
+import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
-const OrderCard = ({ order }: { order: any }) => {
-  return (
-    <Card className="mb-4">
-      <CardHeader className="pb-2">
-        <div className="flex justify-between items-center">
-          <CardTitle className="text-base font-medium">Order #{order.id}</CardTitle>
-          <Badge>{order.status}</Badge>
-        </div>
-        <p className="text-sm text-muted-foreground">Placed on {order.date}</p>
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-col gap-4">
-          {order.items.map((item: any) => (
-            <div key={item.id} className="flex gap-4">
-              <div className="w-16 h-16 bg-muted rounded-md overflow-hidden">
-                <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-              </div>
-              <div>
-                <p className="font-medium">{item.name}</p>
-                <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
-                <p className="text-sm">${item.price.toFixed(2)}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-      <CardFooter className="flex justify-between border-t pt-4">
-        <p className="text-sm text-muted-foreground">
-          Total: <span className="font-bold text-foreground">${order.total.toFixed(2)}</span>
-        </p>
-        <Button variant="outline" size="sm">View Details</Button>
-      </CardFooter>
-    </Card>
-  );
-};
+const profileSchema = z.object({
+  fullName: z.string().min(1, "Full name is required"),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postalCode: z.string().optional(),
+});
 
 const AccountPage = () => {
   const { cartItems } = useCart();
+  const { user, userProfile, signOut, updateProfile } = useAuth();
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const navigate = useNavigate();
   
-  // Sample orders data - in a real app, this would come from an API
-  const orders = [
-    {
-      id: '1001',
-      date: 'May 5, 2025',
-      status: 'Delivered',
-      total: 128.50,
-      items: [
-        { id: '1', name: 'Wireless Headphones', quantity: 1, price: 89.99, image: 'https://source.unsplash.com/random/100x100?headphones' },
-        { id: '2', name: 'Phone Case', quantity: 1, price: 19.99, image: 'https://source.unsplash.com/random/100x100?phone-case' }
-      ]
+  const profileForm = useForm<z.infer<typeof profileSchema>>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: {
+      fullName: userProfile?.full_name || "",
+      phone: userProfile?.phone || "",
+      address: userProfile?.address || "",
+      city: userProfile?.city || "",
+      state: userProfile?.state || "",
+      postalCode: userProfile?.postal_code || "",
     },
-    {
-      id: '1002',
-      date: 'April 28, 2025',
-      status: 'Processing',
-      total: 45.80,
-      items: [
-        { id: '3', name: 'T-Shirt', quantity: 2, price: 22.90, image: 'https://source.unsplash.com/random/100x100?tshirt' }
-      ]
+  });
+  
+  // Update form when profile data changes
+  useEffect(() => {
+    if (userProfile) {
+      profileForm.reset({
+        fullName: userProfile.full_name || "",
+        phone: userProfile.phone || "",
+        address: userProfile.address || "",
+        city: userProfile.city || "",
+        state: userProfile.state || "",
+        postalCode: userProfile.postal_code || "",
+      });
     }
-  ];
+  }, [userProfile, profileForm]);
+  
+  // Fetch recent orders
+  useEffect(() => {
+    const fetchRecentOrders = async () => {
+      if (!user) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*, order_items(*, products(*))')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(2);
+        
+        if (error) throw error;
+        setRecentOrders(data || []);
+      } catch (error) {
+        console.error('Error fetching recent orders:', error);
+      }
+    };
+    
+    fetchRecentOrders();
+  }, [user]);
+  
+  const onProfileSubmit = async (values: z.infer<typeof profileSchema>) => {
+    try {
+      await updateProfile({
+        full_name: values.fullName,
+        phone: values.phone,
+        address: values.address,
+        city: values.city,
+        state: values.state,
+        postal_code: values.postalCode,
+      });
+      
+      toast.success("Profile updated successfully");
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      toast.error("Failed to update profile");
+    }
+  };
+  
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/');
+  };
+  
+  const getStatusBadge = (status: string) => {
+    const statusColorMap: Record<string, string> = {
+      pending: "bg-yellow-100 text-yellow-800",
+      processing: "bg-blue-100 text-blue-800",
+      shipped: "bg-indigo-100 text-indigo-800",
+      delivered: "bg-green-100 text-green-800",
+      cancelled: "bg-red-100 text-red-800",
+    };
+    
+    return (
+      <Badge className={statusColorMap[status?.toLowerCase()] || "bg-gray-100 text-gray-800"} variant="outline">
+        {status?.charAt(0).toUpperCase() + status?.slice(1) || "Processing"}
+      </Badge>
+    );
+  };
   
   return (
     <div className="flex flex-col min-h-screen">
@@ -88,78 +137,107 @@ const AccountPage = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div>
-                  <h3 className="font-medium mb-2">Profile Information</h3>
-                  <form className="space-y-4">
-                    <div className="space-y-2">
-                      <label htmlFor="name" className="text-sm font-medium">
-                        Full Name
-                      </label>
-                      <Input id="name" defaultValue="John Doe" />
+                <Form {...profileForm}>
+                  <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-4">
+                    <FormField
+                      control={profileForm.control}
+                      name="fullName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Full Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Your full name" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={profileForm.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone Number</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Your phone number" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={profileForm.control}
+                      name="address"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Address</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Your address" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={profileForm.control}
+                        name="city"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>City</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Your city" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={profileForm.control}
+                        name="state"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>State</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Your state" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     </div>
                     
-                    <div className="space-y-2">
-                      <label htmlFor="email" className="text-sm font-medium">
-                        Email Address
-                      </label>
-                      <Input id="email" type="email" defaultValue="john.doe@example.com" />
-                    </div>
+                    <FormField
+                      control={profileForm.control}
+                      name="postalCode"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Postal Code</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Your postal code" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                     
-                    <div className="space-y-2">
-                      <label htmlFor="phone" className="text-sm font-medium">
-                        Phone Number
-                      </label>
-                      <Input id="phone" defaultValue="(123) 456-7890" />
+                    <div className="pt-2">
+                      <Button type="submit" className="w-full">
+                        Update Profile
+                      </Button>
                     </div>
-                    
-                    <Button className="w-full">Update Profile</Button>
                   </form>
-                </div>
+                </Form>
                 
-                <div>
-                  <h3 className="font-medium mb-2">Shipping Address</h3>
-                  <form className="space-y-4">
-                    <div className="space-y-2">
-                      <label htmlFor="address" className="text-sm font-medium">
-                        Street Address
-                      </label>
-                      <Input id="address" defaultValue="123 Main Street" />
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label htmlFor="city" className="text-sm font-medium">
-                          City
-                        </label>
-                        <Input id="city" defaultValue="New York" />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <label htmlFor="state" className="text-sm font-medium">
-                          State
-                        </label>
-                        <Input id="state" defaultValue="NY" />
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label htmlFor="zip" className="text-sm font-medium">
-                          Zip Code
-                        </label>
-                        <Input id="zip" defaultValue="10001" />
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <label htmlFor="country" className="text-sm font-medium">
-                          Country
-                        </label>
-                        <Input id="country" defaultValue="United States" />
-                      </div>
-                    </div>
-                    
-                    <Button className="w-full">Update Address</Button>
-                  </form>
+                <div className="pt-4 border-t">
+                  <Button variant="outline" className="w-full gap-2 text-red-600 hover:text-red-700" onClick={handleSignOut}>
+                    <LogOut className="h-4 w-4" />
+                    Sign Out
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -170,27 +248,76 @@ const AccountPage = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Package className="h-5 w-5" />
-                  Order History
+                  Recent Orders
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {orders.length > 0 ? (
-                  <div className="space-y-4">
-                    {orders.map(order => (
-                      <OrderCard key={order.id} order={order} />
+                {recentOrders.length > 0 ? (
+                  <div className="space-y-6">
+                    {recentOrders.map(order => (
+                      <Card key={order.id} className="overflow-hidden">
+                        <CardHeader className="bg-muted/50 py-3">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <p className="text-sm text-muted-foreground">Order #{order.id.substring(0, 8)}</p>
+                              <p className="text-sm font-medium">{new Date(order.created_at).toLocaleDateString()}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-medium">₹{order.total.toFixed(2)}</p>
+                              {getStatusBadge(order.status)}
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="p-4">
+                          <div className="space-y-4">
+                            {order.order_items?.map((item: any) => (
+                              <div key={item.id} className="flex gap-4">
+                                <div className="w-16 h-16 bg-muted rounded-md overflow-hidden">
+                                  <img 
+                                    src={item.products?.image_url || "https://source.unsplash.com/random/100x100?product"} 
+                                    alt={item.products?.name || "Product"} 
+                                    className="w-full h-full object-cover" 
+                                  />
+                                </div>
+                                <div>
+                                  <p className="font-medium">{item.products?.name || "Product"}</p>
+                                  <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
+                                  <p className="text-sm">₹{item.price.toFixed(2)}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                        <CardFooter className="bg-muted/30 py-3 flex justify-end">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => navigate(`/order-success/${order.id}`)}
+                          >
+                            View Order Details
+                          </Button>
+                        </CardFooter>
+                      </Card>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8">
+                  <div className="text-center py-12">
                     <Package className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
                     <h3 className="text-lg font-medium mb-2">No orders yet</h3>
                     <p className="text-muted-foreground mb-4">
                       When you place an order, it will appear here.
                     </p>
-                    <Button>Start Shopping</Button>
+                    <Button onClick={() => navigate('/products')}>Start Shopping</Button>
                   </div>
                 )}
               </CardContent>
+              {recentOrders.length > 0 && (
+                <CardFooter className="flex justify-center border-t pt-4">
+                  <Button variant="outline" onClick={() => navigate('/orders')}>
+                    View All Orders
+                  </Button>
+                </CardFooter>
+              )}
             </Card>
           </div>
         </div>

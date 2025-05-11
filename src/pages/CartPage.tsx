@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import CartItem from '@/components/CartItem';
@@ -7,22 +8,41 @@ import { Button } from '@/components/ui/button';
 import { ArrowRight, ShoppingCart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCart } from '@/context/CartContext';
+import { useAuth } from '@/context/AuthContext';
+import { toast } from 'sonner';
 
 const CartPage = () => {
   const { cartItems, updateQuantity, removeFromCart } = useCart();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   
   const subtotal = cartItems.reduce(
     (total, item) => total + item.product.price * item.quantity,
     0
   );
   
-  // Shipping cost could be calculated based on various factors
-  const shippingCost = subtotal > 100 ? 0 : 10;
+  // Free shipping for orders over ₹1000
+  const shippingCost = subtotal > 1000 ? 0 : 100;
   
-  // Tax calculation (example: 8% tax)
-  const tax = subtotal * 0.08;
+  // GST calculation (18% in India)
+  const tax = subtotal * 0.18;
   
   const total = subtotal + shippingCost + tax;
+  
+  const handleCheckout = () => {
+    if (!user) {
+      toast("Please sign in to checkout", {
+        description: "You need to be signed in to complete your purchase",
+        action: {
+          label: "Sign In",
+          onClick: () => navigate('/auth')
+        }
+      });
+      return;
+    }
+    
+    navigate('/checkout');
+  };
   
   return (
     <div className="flex flex-col min-h-screen">
@@ -53,7 +73,7 @@ const CartPage = () => {
                 <div className="space-y-3 mb-6">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span>${subtotal.toFixed(2)}</span>
+                    <span>₹{subtotal.toFixed(2)}</span>
                   </div>
                   
                   <div className="flex justify-between">
@@ -61,30 +81,31 @@ const CartPage = () => {
                     {shippingCost === 0 ? (
                       <span className="text-green-600">Free</span>
                     ) : (
-                      <span>${shippingCost.toFixed(2)}</span>
+                      <span>₹{shippingCost.toFixed(2)}</span>
                     )}
                   </div>
                   
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Tax</span>
-                    <span>${tax.toFixed(2)}</span>
+                    <span className="text-muted-foreground">GST (18%)</span>
+                    <span>₹{tax.toFixed(2)}</span>
                   </div>
                   
                   <div className="border-t pt-3 mt-3">
                     <div className="flex justify-between font-bold">
                       <span>Total</span>
-                      <span>${total.toFixed(2)}</span>
+                      <span>₹{total.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
                 
-                <Button className="w-full mb-4">
-                  Checkout
+                <Button className="w-full mb-4" onClick={handleCheckout}>
+                  Proceed to Checkout
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
                 
                 <p className="text-xs text-muted-foreground text-center">
-                  Shipping and taxes calculated at checkout.
+                  Shipping and taxes calculated at checkout. <br />
+                  Free shipping available for orders over ₹1000.
                 </p>
               </div>
             </div>
